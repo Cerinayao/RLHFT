@@ -1,0 +1,64 @@
+kdb:
+  host: hfm.princeton.edu
+  port: 6007
+  retry_port: 6009
+  retry_interval: 5
+
+data:
+  start_date: "2024-02-01"
+  end_date: "2024-02-29"
+  date_active: "2024.02.05"
+  instruments: ["ES", "NQ"]
+  preferred_symbols: ["ESH4", "NQH4"]
+  time_grid_q: "(0D00:00:00 + 0D00:01:00 * til 961)"
+  drop_all_nan_rows: true
+
+scaling:
+  scales:
+    ES: 100.0
+    NQ: 100.0
+    CL: 100.0
+    RB: 10000.0
+    HO: 10000.0
+
+signal:
+  window: 60
+  eps: 1.0e-8
+
+zscore:
+  z_window: 300
+  z_lag: 1
+  z_step: 0.5
+  z_clip: 5.0
+
+trading:
+  col_a: ESH4
+  col_b: NQH4
+  inv_limit: 2
+  action_values: [-2, -1, 0, 1, 2]
+  mult_a: 50.0
+  mult_b: 20.0
+  cost_per_trade: 0.0
+
+rule:
+  z_flat: 0.5
+  z_entry: 1.0
+  z_strong: 2.0
+  inv_penalty: 0.0
+
+qlearning:
+  train_end: "2024-02-19"
+  gamma: 0.99
+  lr: 0.001
+  epochs: 100
+  eps_start: 0.5
+  eps_end: 0.01
+  seed: 0
+  regime_window: 60
+  q_decay: 0.998
+  use_adaptive_lr: false
+  lr_visit_scale: 0.01
+  persistent_exploration: 0.02
+  inv_penalty: 1.0
+
+make_plots: true

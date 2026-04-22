@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "rlhft"
+version = "0.1.0"
+description = "RL-based pair trading system for futures"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "seaborn",
+    "statsmodels",
+    "qpython",
+    "pydantic>=2.0",
+    "pyyaml",
+    "plotly",
+]
+
+[project.scripts]
+rlhft = "rlhft.pipeline.runner:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
