@@ -25,6 +25,13 @@ class DataConfig(BaseModel):
 
 class ScalingConfig(BaseModel):
     scales: dict[str, float] = {
+        "ES": 1.0,
+        "NQ": 1.0,
+        "CL": 1.0,
+        "RB": 1.0,
+        "HO": 1.0,
+    }
+    display_scales: dict[str, float] = {
         "ES": 100.0,
         "NQ": 100.0,
         "CL": 100.0,

@@ -12,6 +12,7 @@ if __package__ in {None, ""}:
 
 from rlhft.config import PipelineConfig
 from rlhft.data.kdb import KDBConnection
+from rlhft.data.loaders import sym_prefix
 from rlhft.evaluation.metrics import mean_daily_pnl, max_daily_drawdown
 from rlhft.features.zscore import build_discrete_2asset_input
 from rlhft.pipeline.multiday import run_multiday_pipeline
@@ -33,6 +34,103 @@ from rlhft.evaluation.analysis import (
     sweep_signal_horizons,
     summarize_pnl_by_regime,
 )
+
+
+def _resolve_display_scale(cfg: PipelineConfig) -> float:
+    pfx_a = sym_prefix(cfg.trading.col_a)
+    pfx_b = sym_prefix(cfg.trading.col_b)
+    scale_a = cfg.scaling.display_scales.get(pfx_a, 1.0)
+    scale_b = cfg.scaling.display_scales.get(pfx_b, 1.0)
+    if scale_a != scale_b:
+        print(
+            f"Warning: display_scales differ for {pfx_a}={scale_a} and {pfx_b}={scale_b}; "
+            f"using {pfx_a} ({scale_a}) as the single rescale factor."
+        )
+    return float(scale_a)
+
+
+def rescale_rl_outputs(out_rl: dict, scale: float) -> dict:
+    """Divide RL PnL/reward series by `scale` and recompute metrics."""
+    if scale == 1.0:
+        return out_rl
+    keys = [
+        "train_pnl", "test_pnl",
+        "train_reward", "test_reward",
+        "train_cum", "test_cum",
+        "train_cum_pnl", "test_cum_pnl",
+    ]
+    for k in keys:
+        if k in out_rl and out_rl[k] is not None:
+            out_rl[k] = out_rl[k] / scale
+    out_rl["metrics"] = {
+        "train_mean_daily_pnl_$": mean_daily_pnl(out_rl["train_pnl"]),
+        "train_max_drawdown_$": max_daily_drawdown(out_rl["train_pnl"]),
+        "test_mean_daily_pnl_$": mean_daily_pnl(out_rl["test_pnl"]),
+        "test_max_drawdown_$": max_daily_drawdown(out_rl["test_pnl"]),
+    }
+    return out_rl
+
+
+def rescale_rule_outputs(out_rule: dict, scale: float) -> dict:
+    """Divide rule-based reward/cum series by `scale` and recompute metrics."""
+    if scale == 1.0:
+        return out_rule
+    for k in ("reward", "cum"):
+        if k in out_rule and out_rule[k] is not None:
+            out_rule[k] = out_rule[k] / scale
+    out_rule["metrics"] = {
+        "mean_daily_pnl_$": mean_daily_pnl(out_rule["reward"]),
+        "max_drawdown_daily_$": max_daily_drawdown(out_rule["reward"]),
+    }
+    return out_rule
+
+
+def rescale_price_frame(
+    df: pd.DataFrame,
+    scale: float,
+    price_cols: list[str],
+) -> pd.DataFrame:
+    """Return a copy of `df` with scale-dependent columns divided by `scale`.
+
+    Linear in price: the listed price columns, A_*, s_*, pc1, pc2, sig_a, sig_b.
+    Quadratic in price: M_* (covariance) -> divided by scale**2.
+    """
+    if scale == 1.0 or df is None or df.empty:
+        return df
+    out = df.copy()
+    linear_cols: list[str] = []
+    for c in price_cols:
+        if c in out.columns:
+            linear_cols.append(c)
+    for c in out.columns:
+        if c.startswith(("A_", "s_")) or c in ("pc1", "pc2", "sig_a", "sig_b"):
+            linear_cols.append(c)
+    for c in linear_cols:
+        out[c] = out[c].astype(float) / scale
+    for c in out.columns:
+        if c.startswith("M_"):
+            out[c] = out[c].astype(float) / (scale ** 2)
+    return out
+
+
+def rescale_action_outputs(
+    action_summary: pd.DataFrame | None,
+    action_aligned: pd.DataFrame | None,
+    scale: float,
+) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
+    """Divide forward-return columns by `scale` for display."""
+    if scale == 1.0:
+        return action_summary, action_aligned
+    if action_summary is not None and not action_summary.empty:
+        action_summary = action_summary.copy()
+        for c in ("mean", "std"):
+            if c in action_summary.columns:
+                action_summary[c] = action_summary[c].astype(float) / scale
+    if action_aligned is not None and not action_aligned.empty:
+        action_aligned = action_aligned.copy()
+        if "fwd_ret" in action_aligned.columns:
+            action_aligned["fwd_ret"] = action_aligned["fwd_ret"].astype(float) / scale
+    return action_summary, action_aligned
 
 
 def export_debug_data(
@@ -167,6 +265,9 @@ def run(
         rule_cfg=cfg.rule,
         zscore_cfg=cfg.zscore,
     )
+
+    display_scale = _resolve_display_scale(cfg)
+    out_rule = rescale_rule_outputs(out_rule, display_scale)
     print("Rule metrics:", pd.Series(out_rule["metrics"]))
 
     # --- RL strategy ---
@@ -180,6 +281,11 @@ def run(
         zscore_cfg=cfg.zscore,
         ql_cfg=cfg.qlearning,
     )
+    out_rl = rescale_rl_outputs(out_rl, display_scale)
+
+    price_cols_for_display = [cfg.trading.col_a, cfg.trading.col_b]
+    df_mid_all_display = rescale_price_frame(df_mid_all, display_scale, price_cols_for_display)
+    df_state_all_display = rescale_price_frame(df_state_all, display_scale, price_cols_for_display)
 
     print("\nRL metrics:")
     print({
@@ -193,10 +299,10 @@ def run(
 
     # --- Visualization ---
     if cfg.make_plots:
-        required_cols = [c for c in cfg.data.preferred_symbols if c in df_mid_all.columns]
+        required_cols = [c for c in cfg.data.preferred_symbols if c in df_mid_all_display.columns]
         if len(required_cols) == 2:
             scatter_fig = plot_multiday_scatter(
-                df_mid_all,
+                df_mid_all_display,
                 required_cols[0],
                 required_cols[1],
                 trading_start="00:00",
@@ -207,7 +313,7 @@ def run(
                 matplotlib_sections.append(("All-dates scatter", scatter_fig))
 
             forecast_fig = plot_asset_trading_time(
-                df_state_all,
+                df_state_all_display,
                 required_cols,
                 ["darkorange", "navy"],
                 trading_start="00:00",
@@ -258,7 +364,7 @@ def run(
         for i, fig in enumerate(position_figs, start=1):
             matplotlib_sections.append((f"RL vs Rule positions {i}", fig))
 
-        diag_fig, _ = plot_pc_and_acf_trading_hours(df_state_all, show=render_matplotlib)
+        diag_fig, _ = plot_pc_and_acf_trading_hours(df_state_all_display, show=render_matplotlib)
         matplotlib_sections.append(("PCA diagnostics", diag_fig))
 
     if render_matplotlib and cfg.make_plots:
@@ -316,6 +422,10 @@ def run(
                 start_date=cfg.qlearning.train_end,
             )
 
+            action_summary, action_aligned = rescale_action_outputs(
+                action_summary, action_aligned, display_scale
+            )
+
             if cfg.make_plots:
                 action_fig = plot_action_vs_fwd_return(
                     action_summary,
@@ -342,8 +452,8 @@ def run(
     if dashboard_out is not None:
         dashboard_path = build_dashboard(
             cfg=cfg,
-            df_mid_all=df_mid_all,
-            df_state_all=df_state_all,
+            df_mid_all=df_mid_all_display,
+            df_state_all=df_state_all_display,
             out_rule=out_rule,
             out_rl=out_rl,
             horizon_df=horizon_df,
