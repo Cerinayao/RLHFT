@@ -36,6 +36,26 @@ def scale_for_sym(sym: str, scales: dict[str, float]) -> float:
     return scales.get(pfx, 100.0)
 
 
+def sanitize_midprice_series(series: pd.Series) -> pd.Series:
+    """Coerce malformed midprices to NaN before downstream signal construction."""
+    out = pd.to_numeric(series, errors="coerce")
+    out = out.where(np.isfinite(out) & (out > 0.0), np.nan)
+
+    positive = out.dropna()
+    if positive.empty:
+        return out
+
+    median = float(positive.median())
+    if not np.isfinite(median) or median <= 0.0:
+        return out
+
+    # Reject values that are implausibly far from the day's typical level,
+    # e.g. tiny denormals like 2e-312 from q/python conversion glitches.
+    lower = median * 0.5
+    upper = median * 1.5
+    return out.where((out >= lower) & (out <= upper), np.nan)
+
+
 def query_active_symbols(
     conn: KDBConnection,
     cfg: DataConfig,
@@ -91,6 +111,9 @@ def query_midprices(
         df_sym = df_sym.rename(columns={"midprice1": sym})
     elif sym not in df_sym.columns:
         raise ValueError(f"Midprice query for {sym} on {date_quotes} did not return 'midprice1' or '{sym}'.")
+
+    # Missing quote buckets can come back as 0.0 from kdb/q conversions; treat them as missing.
+    df_sym[sym] = sanitize_midprice_series(df_sym[sym])
 
     return df_sym
 

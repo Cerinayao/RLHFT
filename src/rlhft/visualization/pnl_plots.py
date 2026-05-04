@@ -47,6 +47,8 @@ def plot_rl_vs_rule_comparison(
     out_rl: dict,
     out_rule: dict,
     train_end: str,
+    col_a: str,
+    col_b: str,
     show: bool = True,
 ) -> plt.Figure:
     """Plot RL vs Rule cumulative reward on the test period."""
@@ -73,9 +75,9 @@ def plot_rl_vs_rule_comparison(
     ax.axhline(0, linestyle="--", linewidth=1)
     ax.set_xticks(first_pos)
     ax.set_xticklabels([d.strftime("%m-%d") for d in unique_dates], rotation=45)
-    ax.set_xlabel("Trading Time (00:00-16:00 each day)")
+    ax.set_xlabel("Trading Time (00:00–16:00 each day)")
     ax.set_ylabel("Cumulative Reward")
-    ax.set_title("ES/NQ - Rule vs RL cumulative reward (test period)")
+    ax.set_title(f"{col_a}/{col_b} — Rule vs RL cumulative reward (test period)")
     ax.legend()
     fig.tight_layout()
 

@@ -17,8 +17,8 @@ class DataConfig(BaseModel):
     start_date: str = "2024-02-05"
     end_date: str = "2024-02-23"
     date_active: str = "2024.02.05"
-    instruments: tuple[str, ...] = ("ES", "NQ")
-    preferred_symbols: list[str] = ["ESH4", "NQH4"]
+    instruments: tuple[str, ...] = ("SR3",)
+    preferred_symbols: list[str] = ["SR3Z4", "SR3H5"]
     time_grid_q: str = "(0D00:00:00 + 0D00:01:00 * til 961)"
     drop_all_nan_rows: bool = True
 
@@ -27,6 +27,7 @@ class ScalingConfig(BaseModel):
     scales: dict[str, float] = {
         "ES": 1.0,
         "NQ": 1.0,
+        "SR": 1.0,
         "CL": 1.0,
         "RB": 1.0,
         "HO": 1.0,
@@ -34,6 +35,7 @@ class ScalingConfig(BaseModel):
     display_scales: dict[str, float] = {
         "ES": 100.0,
         "NQ": 100.0,
+        "SR": 100.0,
         "CL": 100.0,
         "RB": 10000.0,
         "HO": 10000.0,
@@ -54,12 +56,12 @@ class ZScoreConfig(BaseModel):
 
 
 class TradingConfig(BaseModel):
-    col_a: str = "ESH4"
-    col_b: str = "NQH4"
+    col_a: str = "SR3Z4"
+    col_b: str = "SR3H5"
     inv_limit: int = 2
     action_values: list[int] = [-2, -1, 0, 1, 2]
-    mult_a: float = 50.0
-    mult_b: float = 20.0
+    mult_a: float = 2500.0
+    mult_b: float = 2500.0
     cost_per_trade: float = 0.0
 
 
@@ -73,7 +75,7 @@ class RuleConfig(BaseModel):
 class QLearningConfig(BaseModel):
     train_end: str = "2024-02-18"
     gamma: float = 0.99
-    lr: float = 0.001
+    lr: float = 0.1
     epochs: int = 100
     eps_start: float = 0.5
     eps_end: float = 0.01

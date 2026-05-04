@@ -158,7 +158,7 @@ def _line_figure(
     return fig
 
 
-def _comparison_figure(out_rl: dict, out_rule: dict, train_end: str) -> go.Figure | None:
+def _comparison_figure(out_rl: dict, out_rule: dict, train_end: str, col_a: str, col_b: str) -> go.Figure | None:
     rule_cum = out_rule["cum"]
     rl_cum = out_rl["test_cum_pnl"]
 
@@ -185,8 +185,8 @@ def _comparison_figure(out_rl: dict, out_rule: dict, train_end: str) -> go.Figur
     fig.add_trace(go.Scatter(x=x_vals, y=aligned["RL"], mode="lines", name="RL", line=dict(width=2)))
     fig.add_hline(y=0, line_dash="dash", line_width=1)
     fig.update_layout(
-        title="Rule vs RL cumulative reward (test period)",
-        xaxis_title="Trading Time (00:00-16:00 each day)",
+        title=f"{col_a}/{col_b} — Rule vs RL cumulative reward (test period)",
+        xaxis_title="Trading Time (00:00–16:00 each day)",
         yaxis_title="Cumulative Reward",
     )
     fig.update_xaxes(tickmode="array", tickvals=tick_pos, ticktext=tick_labels, tickangle=45)
@@ -241,6 +241,10 @@ def _scatter_figure(
 
 
 def _horizon_figure(horizon_df: pd.DataFrame) -> go.Figure | None:
+    required_cols = {"horizon", "correlation"}
+    if horizon_df is None or not required_cols.issubset(horizon_df.columns):
+        return None
+
     plot_df = horizon_df.dropna(subset=["horizon", "correlation"]).copy()
     if plot_df.empty:
         return None
@@ -619,6 +623,7 @@ def build_dashboard(
     action_aligned: pd.DataFrame | None,
     action_rho: float | None,
     regime_summary: pd.DataFrame | None,
+    comparison_summary: pd.DataFrame | None,
     output_path: str | Path,
     matplotlib_sections: list[tuple[str, object]] | None = None,
 ) -> Path:
@@ -666,7 +671,7 @@ def build_dashboard(
     if forecast_fig is not None:
         fallback_plots.append(("Normalized series and forecasts", forecast_fig))
 
-    comparison_fig = _comparison_figure(out_rl, out_rule, cfg.qlearning.train_end)
+    comparison_fig = _comparison_figure(out_rl, out_rule, cfg.qlearning.train_end, cfg.trading.col_a, cfg.trading.col_b)
     if comparison_fig is not None:
         fallback_plots.append(("Rule vs RL", comparison_fig))
 
@@ -674,7 +679,10 @@ def build_dashboard(
     if horizon_fig is not None:
         fallback_plots.append(("Signal horizon sweep", horizon_fig))
 
-    valid_horizons = horizon_df.dropna(subset=["correlation"])
+    if horizon_df is not None and "correlation" in horizon_df.columns:
+        valid_horizons = horizon_df.dropna(subset=["correlation"])
+    else:
+        valid_horizons = pd.DataFrame(columns=["horizon", "correlation"])
     best_h = int(valid_horizons.loc[valid_horizons["correlation"].idxmax(), "horizon"]) if not valid_horizons.empty else None
     action_fig = _action_figure(
         action_summary,
@@ -705,6 +713,8 @@ def build_dashboard(
     tables.append(("Metrics", _table_figure(metrics_df, "Strategy metrics")))
     if regime_summary is not None and not regime_summary.empty:
         tables.append(("Regime summary", _table_figure(regime_summary, "PnL by regime")))
+    if comparison_summary is not None and not comparison_summary.empty:
+        tables.append(("Rule vs RL summary", _table_figure(comparison_summary, "Rule vs RL summary")))
 
     sections: list[str] = []
     excluded_headings = {

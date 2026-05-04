@@ -50,6 +50,7 @@ def run_oneday_pipeline(
         if sym in df_midprice_all.columns:
             s = scale_for_sym(sym, cfg.scaling.scales)
             df_midprice_all[sym] = df_midprice_all[sym].astype(float) / s
+            df_midprice_all[sym] = df_midprice_all[sym].where(df_midprice_all[sym] > 0.0, np.nan)
 
     # 4) Optional scatter plot
     if cfg.make_plots:
