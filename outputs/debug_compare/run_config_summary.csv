@@ -1,6 +1,6 @@
 item,value
-col_a,SR3Z4
-col_b,SR3H5
+col_a,CLJ4
+col_b,RBJ4
 train_end,2024-02-18
 z_window,300
 z_lag,1
@@ -14,8 +14,8 @@ regime_window,60
 q_decay,0.998
 persistent_exploration,0.02
 inv_limit,2
-mult_a,2500.0
-mult_b,2500.0
+mult_a,1000.0
+mult_b,42000.0
 cost_per_trade,0.0
 rule_inv_penalty,0.0
 rl_inv_penalty,1.0

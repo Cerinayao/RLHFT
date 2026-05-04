@@ -17,8 +17,8 @@ class DataConfig(BaseModel):
     start_date: str = "2024-02-05"
     end_date: str = "2024-02-23"
     date_active: str = "2024.02.05"
-    instruments: tuple[str, ...] = ("SR3",)
-    preferred_symbols: list[str] = ["SR3Z4", "SR3H5"]
+    instruments: tuple[str, ...] = ("CL", "RB")
+    preferred_symbols: list[str] = ["CLJ4", "RBJ4"]
     time_grid_q: str = "(0D00:00:00 + 0D00:01:00 * til 961)"
     drop_all_nan_rows: bool = True
 
@@ -56,12 +56,12 @@ class ZScoreConfig(BaseModel):
 
 
 class TradingConfig(BaseModel):
-    col_a: str = "SR3Z4"
-    col_b: str = "SR3H5"
+    col_a: str = "CLJ4"
+    col_b: str = "RBJ4"
     inv_limit: int = 2
     action_values: list[int] = [-2, -1, 0, 1, 2]
-    mult_a: float = 2500.0
-    mult_b: float = 2500.0
+    mult_a: float = 1000.0
+    mult_b: float = 42000.0
     cost_per_trade: float = 0.0
 
 

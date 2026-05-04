@@ -12,7 +12,7 @@ if __package__ in {None, ""}:
     # Allow running this file directly from a src-layout checkout.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from rlhft.config import PipelineConfig
+from rlhft.config import PipelineConfig, TradingConfig
 from rlhft.data.kdb import KDBConnection
 from rlhft.data.loaders import sym_prefix
 from rlhft.evaluation.metrics import mean_daily_pnl, max_daily_drawdown
@@ -56,76 +56,73 @@ from rlhft.evaluation.analysis import (
 )
 
 
-def _resolve_display_scale(cfg: PipelineConfig) -> float:
-    """Single factor used to convert raw x100/x10000 price units back to display/PnL units."""
+def _display_scales_for_trading_pair(cfg: PipelineConfig) -> tuple[float, float]:
     pfx_a = sym_prefix(cfg.trading.col_a)
     pfx_b = sym_prefix(cfg.trading.col_b)
-    scale_a = cfg.scaling.display_scales.get(pfx_a, 1.0)
-    scale_b = cfg.scaling.display_scales.get(pfx_b, 1.0)
-    if scale_a != scale_b:
+    scale_a = float(cfg.scaling.display_scales.get(pfx_a, 1.0))
+    scale_b = float(cfg.scaling.display_scales.get(pfx_b, 1.0))
+    return scale_a, scale_b
+
+
+def _display_trading_cfg(cfg: PipelineConfig) -> TradingConfig:
+    """Return trading config with per-leg multipliers adjusted to display-price units."""
+    scale_a, scale_b = _display_scales_for_trading_pair(cfg)
+    if scale_a != 1.0 or scale_b != 1.0:
         print(
-            f"Warning: display_scales differ for {pfx_a}={scale_a} and {pfx_b}={scale_b}; "
-            f"using {pfx_a} ({scale_a}) as the single rescale factor."
+            "Adjusting trading multipliers to display-price units: "
+            f"{cfg.trading.col_a}/x{scale_a:g}, {cfg.trading.col_b}/x{scale_b:g}"
         )
-    return float(scale_a)
-
-
-def rescale_rl_outputs(out_rl: dict, scale: float) -> dict:
-    """Rescale all RL PnL/reward series by the raw price multiplier (e.g. 100 for ES/NQ)."""
-    if scale == 1.0:
-        return out_rl
-    keys = [
-        "train_pnl", "test_pnl",
-        "train_reward", "test_reward",
-        "train_cum", "test_cum",
-        "train_cum_pnl", "test_cum_pnl",
-    ]
-    for k in keys:
-        if k in out_rl and out_rl[k] is not None:
-            out_rl[k] = out_rl[k] / scale
-    out_rl["metrics"] = {
-        "train_mean_daily_pnl_$": mean_daily_pnl(out_rl["train_pnl"]),
-        "train_max_drawdown_$": max_daily_drawdown(out_rl["train_pnl"]),
-        "test_mean_daily_pnl_$": mean_daily_pnl(out_rl["test_pnl"]),
-        "test_max_drawdown_$": max_daily_drawdown(out_rl["test_pnl"]),
-    }
-    return out_rl
-
-
-def rescale_rule_outputs(out_rule: dict, scale: float) -> dict:
-    """Rescale all rule-based reward/cumulative series by the raw price multiplier."""
-    if scale == 1.0:
-        return out_rule
-    for k in ("reward", "cum"):
-        if k in out_rule and out_rule[k] is not None:
-            out_rule[k] = out_rule[k] / scale
-    out_rule["metrics"] = {
-        "mean_daily_pnl_$": mean_daily_pnl(out_rule["reward"]),
-        "max_drawdown_daily_$": max_daily_drawdown(out_rule["reward"]),
-    }
-    return out_rule
+    return cfg.trading.model_copy(
+        update={
+            "mult_a": cfg.trading.mult_a / scale_a,
+            "mult_b": cfg.trading.mult_b / scale_b,
+        }
+    )
 
 
 def rescale_price_frame(
     df: pd.DataFrame,
-    scale: float,
-    price_cols: list[str],
+    price_scales: dict[str, float],
 ) -> pd.DataFrame:
-    if scale == 1.0 or df is None or df.empty:
+    if df is None or df.empty:
         return df
     out = df.copy()
-    linear_cols: list[str] = []
-    for c in price_cols:
-        if c in out.columns:
-            linear_cols.append(c)
-    for c in out.columns:
-        if c.startswith(("A_", "s_")) or c in ("pc1", "pc2", "sig_a", "sig_b"):
-            linear_cols.append(c)
-    for c in linear_cols:
-        out[c] = out[c].astype(float) / scale
-    for c in out.columns:
-        if c.startswith("M_"):
-            out[c] = out[c].astype(float) / (scale ** 2)
+    if all(scale == 1.0 for scale in price_scales.values()):
+        return out
+    keys = list(price_scales.keys())
+    scale_a = price_scales.get(keys[0], 1.0) if keys else 1.0
+    scale_b = price_scales.get(keys[1], 1.0) if len(keys) > 1 else 1.0
+
+    for ticker, scale in price_scales.items():
+        if scale == 1.0:
+            continue
+        if ticker in out.columns:
+            out[ticker] = out[ticker].astype(float) / scale
+        a_col = f"A_{ticker}"
+        s_col = f"s_{ticker}"
+        if a_col in out.columns:
+            out[a_col] = out[a_col].astype(float) / scale
+        if s_col in out.columns:
+            out[s_col] = out[s_col].astype(float) / scale
+
+    if "sig_a" in out.columns and scale_a != 1.0:
+        out["sig_a"] = out["sig_a"].astype(float) / scale_a
+    if "sig_b" in out.columns and scale_b != 1.0:
+        out["sig_b"] = out["sig_b"].astype(float) / scale_b
+
+    for col in list(out.columns):
+        if not col.startswith("M_"):
+            continue
+        _, left, right = col.split("_", 2)
+        scale_left = price_scales.get(left, 1.0)
+        scale_right = price_scales.get(right, 1.0)
+        if scale_left != 1.0 or scale_right != 1.0:
+            out[col] = out[col].astype(float) / (scale_left * scale_right)
+
+    if "pc1" in out.columns:
+        out["pc1"] = out["pc1"].astype(float) / scale_a
+    if "pc2" in out.columns:
+        out["pc2"] = out["pc2"].astype(float) / scale_a
     return out
 
 
@@ -243,20 +240,14 @@ def run(
     print("Running rule-based strategy...")
     print("=" * 60)
 
+    trading_cfg_display = _display_trading_cfg(cfg)
+
     out_rule = run_rule_2asset_discrete(
         df_input,
-        trading_cfg=cfg.trading,
+        trading_cfg=trading_cfg_display,
         rule_cfg=cfg.rule,
         zscore_cfg=cfg.zscore,
     )
-
-    display_scale = _resolve_display_scale(cfg)
-    if display_scale != 1.0:
-        print(
-            f"Rescaling all reported PnL/reward outputs by {display_scale:g} "
-            f"because raw prices are stored in x{display_scale:g} units."
-        )
-    out_rule = rescale_rule_outputs(out_rule, display_scale)
     print("Rule metrics:", pd.Series(out_rule["metrics"]))
 
     # --- RL strategy ---
@@ -266,15 +257,17 @@ def run(
 
     out_rl = run_rl_strategy(
         df_input,
-        trading_cfg=cfg.trading,
+        trading_cfg=trading_cfg_display,
         zscore_cfg=cfg.zscore,
         ql_cfg=cfg.qlearning,
     )
-    out_rl = rescale_rl_outputs(out_rl, display_scale)
 
-    price_cols_for_display = [cfg.trading.col_a, cfg.trading.col_b]
-    df_mid_all_display = rescale_price_frame(df_mid_all, display_scale, price_cols_for_display)
-    df_state_all_display = rescale_price_frame(df_state_all, display_scale, price_cols_for_display)
+    price_scales = {
+        cfg.trading.col_a: float(cfg.scaling.display_scales.get(sym_prefix(cfg.trading.col_a), 1.0)),
+        cfg.trading.col_b: float(cfg.scaling.display_scales.get(sym_prefix(cfg.trading.col_b), 1.0)),
+    }
+    df_mid_all_display = rescale_price_frame(df_mid_all, price_scales)
+    df_state_all_display = rescale_price_frame(df_state_all, price_scales)
 
     print("\nRL metrics:")
     print({

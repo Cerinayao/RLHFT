@@ -8,8 +8,8 @@ data:
   start_date: "2024-02-05"
   end_date: "2024-02-23"
   date_active: "2024.02.05"
-  instruments: ["SR3"]
-  preferred_symbols: ["SR3Z4", "SR3H5"]
+  instruments: ["CL", "RB"]
+  preferred_symbols: ["CLJ4", "RBJ4"]
   time_grid_q: "(0D00:00:00 + 0D00:01:00 * til 961)"
   drop_all_nan_rows: true
 
@@ -40,12 +40,12 @@ zscore:
   z_clip: 5.0
 
 trading:
-  col_a: SR3Z4
-  col_b: SR3H5
+  col_a: CLJ4
+  col_b: RBJ4
   inv_limit: 2
   action_values: [-2, -1, 0, 1, 2]
-  mult_a: 2500.0
-  mult_b: 2500.0
+  mult_a: 1000.0
+  mult_b: 42000.0
   cost_per_trade: 0.0
 
 rule:
