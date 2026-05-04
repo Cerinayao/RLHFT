@@ -27,6 +27,30 @@ def run_multiday_pipeline(
       5) compute EWM PCA signal
       6) plot trading-time series
     """
+    def _scale_for_sym(sym: str) -> float:
+        pfx = sym[:2].upper()
+        if pfx == "ES":
+            return 100.0
+        if pfx == "NQ":
+            return 100.0
+        return 1.0
+
+    def _clean_price_rows(df_block: pd.DataFrame, price_cols: list[str], *, context: str) -> pd.DataFrame:
+        out = df_block.copy()
+        vals = out[price_cols].astype(float)
+        finite_mask = np.isfinite(vals).all(axis=1)
+        scaled = pd.DataFrame(index=out.index)
+        for sym in price_cols:
+            scale = max(float(_scale_for_sym(sym)), 1.0)
+            scaled[sym] = vals[sym] / scale
+        plausible_mask = scaled.abs().le(1e6).all(axis=1)
+        keep_mask = finite_mask & plausible_mask
+        dropped = int((~keep_mask).sum())
+        if dropped:
+            print(f"Dropped {dropped} {context} rows with non-finite or implausible prices.")
+        out[price_cols] = vals
+        return out.loc[keep_mask].copy()
+
     # 1) Active symbols
     sym_active = query_active_symbols(conn, cfg.data)
 
@@ -44,7 +68,8 @@ def run_multiday_pipeline(
     if render_plots and cfg.make_plots and len(required_cols) == 2:
         col_x, col_y = required_cols
         if {col_x, col_y}.issubset(df_mid_all.columns):
-            df_sc = df_mid_all[["datetime", col_x, col_y]].dropna()
+            df_sc = _clean_price_rows(df_mid_all[["datetime", col_x, col_y]], [col_x, col_y], context="scatter")
+            df_sc = df_sc.dropna(subset=[col_x, col_y], how="any")
             cvals = mdates.date2num(df_sc["datetime"])
             tick_idx = np.linspace(0, len(df_sc) - 1, min(6, len(df_sc)), dtype=int)
             tick_vals = cvals[tick_idx]
@@ -65,7 +90,7 @@ def run_multiday_pipeline(
             plt.show()
 
     # 5) Compute signal
-    prices = df_mid_all[["datetime"] + required_cols].copy()
+    prices = _clean_price_rows(df_mid_all[["datetime"] + required_cols], required_cols, context="signal")
     prices = prices.set_index("datetime")
     prices = prices.dropna(subset=required_cols, how="any")
 
@@ -73,11 +98,6 @@ def run_multiday_pipeline(
         raise ValueError("After dropping missing prices, no rows remain for signal construction.")
 
     df_state_all = compute_ewm_pca_signal(prices, cfg.signal)
-
-    # Filter rows where required columns are non-finite or zero (notebook cell 8)
-    finite_mask = np.isfinite(df_state_all[required_cols]).all(axis=1)
-    nonzero_mask = (df_state_all[required_cols] != 0).all(axis=1)
-    df_state_all = df_state_all[finite_mask & nonzero_mask].copy()
 
     # 6) Plot
     if render_plots and cfg.make_plots and len(required_cols) == 2:

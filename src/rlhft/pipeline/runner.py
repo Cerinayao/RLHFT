@@ -25,6 +25,7 @@ from rlhft.models.xgb_inventory import (
     xgb_feature_importance,
 )
 from rlhft.models.rule_extraction import extract_and_select_rules
+from rlhft.models.rule_extraction import predict_from_partition_tree_rules
 from rlhft.pipeline.multiday import run_multiday_pipeline
 from rlhft.strategies.rule_based import run_rule_2asset_discrete
 from rlhft.strategies.rl_strategy import run_rl_strategy
@@ -46,6 +47,7 @@ from rlhft.visualization.xrl_plots import (
     plot_xrl_policy_curves,
 )
 from rlhft.visualization.rule_tree import plot_rule_tree_from_df
+from rlhft.visualization.partition_tree import plot_partition_decision_tree
 from rlhft.evaluation.analysis import (
     action_vs_fwd_return,
     summarize_action_vs_fwd_return,
@@ -489,8 +491,10 @@ def run(
     print("Training XGBoost inventory model...")
     print("=" * 60)
     xgb_results: dict | None = None
+    xgb_val_bt = None
     xgb_test_bt = None
     rule_extraction_results: dict | None = None
+    partition_tree_results: dict | None = None
     try:
         xgb_results = train_xgb_inventory(
             df_input,
@@ -505,6 +509,21 @@ def run(
 
     if xgb_results is not None:
         try:
+            xgb_val_bt, xgb_val_summary = backtest_predicted_inventory_2asset(
+                df_input,
+                xgb_results["pred_n_val"],
+                col_a=cfg.trading.col_a,
+                col_b=cfg.trading.col_b,
+                mult_a=cfg.trading.mult_a / display_scale,
+                mult_b=cfg.trading.mult_b / display_scale,
+                trading_start=cfg.analysis.trading_start,
+                trading_end=cfg.analysis.trading_end,
+                cost_per_trade=cfg.trading.cost_per_trade,
+                inv_penalty=cfg.xgb.inv_penalty,
+            )
+            print("\n=== XGB Validation Backtest ===")
+            print(xgb_val_summary)
+
             xgb_test_bt, xgb_test_summary = backtest_predicted_inventory_2asset(
                 df_input,
                 xgb_results["pred_n_test"],
@@ -660,6 +679,128 @@ def run(
             print("\n=== Selected NQ Rules ===")
             for i, r in selected_nq.iterrows():
                 print(f"[{i+1}] Inventory {r['inventory']} | score={r['score']:.4f} | {r['rule_text']}")
+
+            # --- Notebook partition tree + score-vote backtest ---
+            pred_es_partition = predict_from_partition_tree_rules(
+                xgb_results["X_test"],
+                selected_es,
+                min_score=0.03,
+            )
+            pred_nq_partition = predict_from_partition_tree_rules(
+                xgb_results["X_test"],
+                selected_nq,
+                min_score=0.03,
+            )
+            pred_partition_test = pd.DataFrame(
+                {
+                    f"xgb_n_{cfg.trading.col_a}": pred_es_partition,
+                    f"xgb_n_{cfg.trading.col_b}": pred_nq_partition,
+                },
+                index=xgb_results["X_test"].index,
+            )
+
+            partition_bt, partition_summary = backtest_predicted_inventory_2asset(
+                df_input,
+                pred_partition_test,
+                col_a=cfg.trading.col_a,
+                col_b=cfg.trading.col_b,
+                mult_a=cfg.trading.mult_a / display_scale,
+                mult_b=cfg.trading.mult_b / display_scale,
+                trading_start=cfg.analysis.trading_start,
+                trading_end=cfg.analysis.trading_end,
+                cost_per_trade=cfg.trading.cost_per_trade,
+                inv_penalty=cfg.xgb.inv_penalty,
+            )
+            print("\n=== Partition Tree Rule Backtest ===")
+            print(partition_summary)
+
+            partition_pnl = partition_bt["pnl"].between_time(
+                cfg.analysis.trading_start, cfg.analysis.trading_end
+            ).dropna()
+            rl_pnl = out_rl["test_pnl"].reindex(partition_pnl.index).dropna()
+            common_idx = partition_pnl.index.intersection(rl_pnl.index)
+            partition_pnl = partition_pnl.loc[common_idx]
+            rl_pnl = rl_pnl.loc[common_idx]
+            compare_summary = pd.DataFrame(
+                {
+                    "Partition_Tree": {
+                        "cum_pnl": partition_pnl.sum(),
+                        "mean_pnl": partition_pnl.mean(),
+                        "std_pnl": partition_pnl.std(),
+                        "sharpe": (
+                            np.sqrt(252) * partition_pnl.mean() / partition_pnl.std()
+                            if partition_pnl.std() > 0
+                            else np.nan
+                        ),
+                        "max_drawdown": (
+                            partition_pnl.cumsum() - partition_pnl.cumsum().cummax()
+                        ).min(),
+                    },
+                    "RL": {
+                        "cum_pnl": rl_pnl.sum(),
+                        "mean_pnl": rl_pnl.mean(),
+                        "std_pnl": rl_pnl.std(),
+                        "sharpe": (
+                            np.sqrt(252) * rl_pnl.mean() / rl_pnl.std()
+                            if rl_pnl.std() > 0
+                            else np.nan
+                        ),
+                        "max_drawdown": (
+                            rl_pnl.cumsum() - rl_pnl.cumsum().cummax()
+                        ).min(),
+                    },
+                }
+            )
+            print("\n=== Partition Tree Rules vs RL Summary ===")
+            print(compare_summary)
+
+            partition_tree_results = {
+                "pred_test": pred_partition_test,
+                "partition_bt": partition_bt,
+                "partition_summary": partition_summary,
+                "compare_summary": compare_summary,
+            }
+
+            if cfg.make_plots:
+                try:
+                    partition_vs_rl_fig, _, _ = plot_xgb_vs_rl_pnl(
+                        xgb_bt=partition_bt,
+                        out_rl=out_rl,
+                        trading_start=cfg.analysis.trading_start,
+                        trading_end=cfg.analysis.trading_end,
+                        title="Test Cumulative PnL: RL vs Partition Tree Rules",
+                        show=render_matplotlib,
+                    )
+                    matplotlib_sections.append(("Test Cumulative PnL: RL vs Partition Tree Rules", partition_vs_rl_fig))
+                except Exception as exc:
+                    print(f"Partition-tree-vs-RL plot skipped: {exc}")
+
+                try:
+                    tmp_dir = Path(tempfile.mkdtemp(prefix="rlhft_partition_tree_"))
+                    es_partition_png = plot_partition_decision_tree(
+                        selected_es,
+                        feature_order=["zqa", "regime_a", "n_a_prev", "zqb", "regime_b", "n_b_prev"],
+                        title="Partition Decision Tree for ES Inventory",
+                        filename=tmp_dir / "partition_tree_es",
+                        min_score=0.03,
+                        top_n=50,
+                        max_depth=3,
+                    )
+                    nq_partition_png = plot_partition_decision_tree(
+                        selected_nq,
+                        feature_order=["zqb", "regime_b", "n_b_prev", "zqa", "regime_a", "n_a_prev"],
+                        title="Partition Decision Tree for NQ Inventory",
+                        filename=tmp_dir / "partition_tree_nq",
+                        min_score=0.03,
+                        top_n=50,
+                        max_depth=3,
+                    )
+                    if es_partition_png is not None:
+                        matplotlib_sections.append(("Partition Decision Tree for ES Inventory", es_partition_png))
+                    if nq_partition_png is not None:
+                        matplotlib_sections.append(("Partition Decision Tree for NQ Inventory", nq_partition_png))
+                except Exception as exc:
+                    print(f"Partition decision tree skipped: {exc}")
         except Exception as exc:
             print(f"Rule extraction skipped: {exc}")
 
@@ -708,8 +849,10 @@ def run(
         "action_aligned": action_aligned,
         "regime_summary": regime_summary,
         "xgb_results": xgb_results,
+        "xgb_val_bt": xgb_val_bt,
         "xgb_test_bt": xgb_test_bt,
         "rule_extraction": rule_extraction_results,
+        "partition_tree": partition_tree_results,
         "dashboard_path": dashboard_path,
         "debug_export_path": debug_export_path,
     }

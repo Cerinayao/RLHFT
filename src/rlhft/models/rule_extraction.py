@@ -114,6 +114,34 @@ def predict_from_selected_rules(X: pd.DataFrame, selected_rules: pd.DataFrame) -
     return pd.Series(preds, index=X.index)
 
 
+def predict_from_partition_tree_rules(
+    X: pd.DataFrame,
+    selected_rules: pd.DataFrame,
+    *,
+    min_score: float = 0.03,
+    default_action: int = 0,
+) -> pd.Series:
+    """Score-vote prediction used by the notebook partition-tree backtest."""
+    rules = selected_rules.copy()
+    rules = rules[rules["score"] > min_score].copy()
+
+    preds: list[int] = []
+    for _, row in X.iterrows():
+        scores = {-2: 0.0, -1: 0.0, 0: 0.0, 1: 0.0, 2: 0.0}
+
+        for _, rule in rules.iterrows():
+            if rule_applies_to_row(row, rule["path"]):
+                action = int(rule["inventory"])
+                scores[action] += float(rule["score"])
+
+        if all(v == 0 for v in scores.values()):
+            preds.append(default_action)
+        else:
+            preds.append(max(scores, key=scores.get))
+
+    return pd.Series(preds, index=X.index)
+
+
 def greedy_select_rules_for_fidelity(
     X: pd.DataFrame,
     rules_df: pd.DataFrame,
@@ -218,6 +246,7 @@ __all__ = [
     "build_rule_matrix",
     "path_to_text",
     "predict_from_selected_rules",
+    "predict_from_partition_tree_rules",
     "greedy_select_rules_for_fidelity",
     "extract_and_select_rules",
 ]

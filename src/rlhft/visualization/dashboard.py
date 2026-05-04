@@ -99,7 +99,21 @@ def _png_path_to_img_html(path) -> str:
     return f'<img alt="plot" src="data:image/png;base64,{encoded}" style="width:100%;height:auto;display:block;border-radius:12px;" />'
 
 
+def _render_zoomable_png_section(heading: str, path: str | Path) -> str:
+    data = Path(path).read_bytes()
+    encoded = base64.b64encode(data).decode("ascii")
+    body = (
+        '<div class="scroll-frame">'
+        f'<img alt="{heading}" src="data:image/png;base64,{encoded}" '
+        'style="width:auto;max-width:none;height:auto;display:block;border-radius:12px;" />'
+        "</div>"
+    )
+    return f"<section><h2>{heading}</h2>{body}</section>"
+
+
 def _render_section(heading: str, fig) -> str:
+    if isinstance(fig, (str, Path)) and "tree" in heading.lower():
+        return _render_zoomable_png_section(heading, fig)
     if isinstance(fig, go.Figure):
         body = to_html(fig, full_html=False, include_plotlyjs=False)
     elif isinstance(fig, (str, Path)):
@@ -608,7 +622,7 @@ def build_dashboard(
     output_path: str | Path,
     matplotlib_sections: list[tuple[str, object]] | None = None,
 ) -> Path:
-    """Write a standalone Plotly dashboard with plots and result tables."""
+    """Write a standalone dashboard that mirrors the notebook plot order when available."""
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -628,10 +642,10 @@ def build_dashboard(
     keep_cols = ["strategy", "mean_daily_pnl_$", "max_drawdown_daily_$"]
     metrics_df = metrics_df[keep_cols]
 
-    plots: list[tuple[str, go.Figure]] = []
+    fallback_plots: list[tuple[str, go.Figure]] = []
     tables: list[tuple[str, go.Figure]] = []
 
-    plots.append((
+    fallback_plots.append((
         "Cumulative reward overview",
         _line_figure(
             [
@@ -646,19 +660,19 @@ def build_dashboard(
 
     scatter_fig = _scatter_figure(df_mid_all, cfg.trading.col_a, cfg.trading.col_b)
     if scatter_fig is not None:
-        plots.append(("All-dates scatter", scatter_fig))
+        fallback_plots.append(("All-dates scatter", scatter_fig))
 
     forecast_fig = _normalized_forecast_figure(df_state_all, cfg.trading.col_a, cfg.trading.col_b)
     if forecast_fig is not None:
-        plots.append(("Normalized series and forecasts", forecast_fig))
+        fallback_plots.append(("Normalized series and forecasts", forecast_fig))
 
     comparison_fig = _comparison_figure(out_rl, out_rule, cfg.qlearning.train_end)
     if comparison_fig is not None:
-        plots.append(("Rule vs RL", comparison_fig))
+        fallback_plots.append(("Rule vs RL", comparison_fig))
 
     horizon_fig = _horizon_figure(horizon_df)
     if horizon_fig is not None:
-        plots.append(("Signal horizon sweep", horizon_fig))
+        fallback_plots.append(("Signal horizon sweep", horizon_fig))
 
     valid_horizons = horizon_df.dropna(subset=["correlation"])
     best_h = int(valid_horizons.loc[valid_horizons["correlation"].idxmax(), "horizon"]) if not valid_horizons.empty else None
@@ -670,37 +684,45 @@ def build_dashboard(
         action_rho,
     )
     if action_fig is not None:
-        plots.append(("Action analysis", action_fig))
+        fallback_plots.append(("Action analysis", action_fig))
 
     positions_fig = _positions_side_by_side_figure(out_rl, out_rule, cfg.trading.col_a, cfg.trading.col_b)
     if positions_fig is not None:
-        plots.append(("RL vs Rule positions", positions_fig))
+        fallback_plots.append(("RL vs Rule positions", positions_fig))
 
     inventory_fig = _positions_figure(out_rl, out_rule, cfg.trading.col_a, cfg.trading.col_b)
     if inventory_fig is not None:
-        plots.append(("Inventory paths", inventory_fig))
+        fallback_plots.append(("Inventory paths", inventory_fig))
 
     residual_fig = _residual_figure(df_state_all, cfg.trading.col_a, cfg.trading.col_b)
     if residual_fig is not None:
-        plots.append(("OLS residuals", residual_fig))
+        fallback_plots.append(("OLS residuals", residual_fig))
 
     diagnostics_fig = _diagnostics_figure(df_state_all)
     if diagnostics_fig is not None:
-        plots.append(("PCA diagnostics", diagnostics_fig))
+        fallback_plots.append(("PCA diagnostics", diagnostics_fig))
 
     tables.append(("Metrics", _table_figure(metrics_df, "Strategy metrics")))
     if regime_summary is not None and not regime_summary.empty:
         tables.append(("Regime summary", _table_figure(regime_summary, "PnL by regime")))
 
     sections: list[str] = []
-    # Render all matplotlib/PNG sections (notebook-style figures) first, then
-    # the interactive Plotly plots, then result tables. This way the dashboard
-    # surfaces every plot the notebook produces.
+    excluded_headings = {
+        "ES Rule Decision Tree",
+        "NQ Rule Decision Tree",
+        "Action vs forward return",
+    }
+    # Prefer the notebook-style Matplotlib/PNG figures collected by the pipeline.
+    # These are the closest match to exploration.ipynb. Only fall back to Plotly
+    # recreations when those notebook-style figures are unavailable.
     if matplotlib_sections:
         for heading, fig in matplotlib_sections:
+            if heading in excluded_headings:
+                continue
             sections.append(_render_section(heading, fig))
-    for heading, fig in plots:
-        sections.append(_render_section(heading, fig))
+    else:
+        for heading, fig in fallback_plots:
+            sections.append(_render_section(heading, fig))
     for heading, fig in tables:
         sections.append(_render_section(heading, fig))
 
@@ -787,13 +809,23 @@ def build_dashboard(
       margin: 10px 10px 0;
       font-size: 1.15rem;
     }}
+    .scroll-frame {{
+      overflow: auto;
+      max-width: 100%;
+      max-height: 78vh;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #fbfdff;
+      cursor: grab;
+    }}
   </style>
 </head>
 <body>
   <main>
     <header>
-      <h1>RLHFT Plotly Dashboard</h1>
-      <p>Interactive pipeline output for {cfg.trading.col_a}/{cfg.trading.col_b}</p>
+      <h1>RLHFT Notebook-Style Dashboard</h1>
+      <p>Pipeline output for {cfg.trading.col_a}/{cfg.trading.col_b}, matched to exploration.ipynb</p>
       <div class="meta">
         <div class="meta-card"><strong>Train End</strong><span>{cfg.qlearning.train_end}</span></div>
         <div class="meta-card"><strong>Date Range</strong><span>{cfg.data.start_date} to {cfg.data.end_date}</span></div>

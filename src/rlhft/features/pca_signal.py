@@ -11,27 +11,13 @@ def compute_ewm_pca_signal(
     cfg: SignalConfig,
     col_prefix: str = "",
 ) -> pd.DataFrame:
-    """Compute exponentially-weighted PCA-based signal (A/B/M statistics, pc1/pc2, per-asset signal s_*)."""
+    """Compute notebook-style exponentially-weighted PCA signal."""
     df = df_prices.copy()
     tickers = list(df.columns)
     N = len(tickers)
     alpha = float(np.exp(-1.0 / cfg.window))
     z = df.values.astype(float)
     T = z.shape[0]
-
-    finite_abs = np.abs(z[np.isfinite(z)])
-    if finite_abs.size:
-        median_abs = float(np.nanmedian(finite_abs))
-        max_abs = float(np.nanmax(finite_abs))
-    else:
-        median_abs = 1.0
-        max_abs = 1.0
-
-    max_safe_abs = np.sqrt(np.finfo(float).max) / 4.0
-    scale_floor = max_abs / max_safe_abs if max_abs > 0.0 else 1.0
-    value_scale = max(median_abs, scale_floor, cfg.eps)
-    value_scale_sq = float(np.square(np.float64(min(value_scale, np.sqrt(np.finfo(float).max)))))
-    z_scaled = z / value_scale
 
     A = np.zeros(N, dtype=float)
     B = np.zeros(N, dtype=float)
@@ -49,7 +35,7 @@ def compute_ewm_pca_signal(
     prev_v2 = None
 
     for t in range(T):
-        zt = z_scaled[t]
+        zt = z[t]
         mask = np.isfinite(zt).astype(float)
 
         A = alpha * A + mask * np.where(np.isfinite(zt), zt, 0.0)
@@ -61,7 +47,6 @@ def compute_ewm_pca_signal(
         mu = A / np.maximum(B, cfg.eps)
 
         Cov = M / np.maximum(np.mean(B), cfg.eps) - np.outer(mu, mu)
-        Cov = np.nan_to_num(Cov, nan=0.0, posinf=0.0, neginf=0.0)
         Cov = 0.5 * (Cov + Cov.T)
 
         diag = np.diag(Cov)
@@ -95,10 +80,10 @@ def compute_ewm_pca_signal(
         z_hat = mu + (v1 * sigma) * xi
         s = z_hat - np.where(np.isfinite(zt), zt, z_hat)
 
-        A_hist[t] = A * value_scale
+        A_hist[t] = A
         B_hist[t] = B
-        M_hist[t] = M * value_scale_sq
-        s_hist[t] = s * value_scale
+        M_hist[t] = M
+        s_hist[t] = s
 
     out = df.copy()
 
@@ -111,8 +96,8 @@ def compute_ewm_pca_signal(
         for j, tkj in enumerate(tickers):
             out[f"{col_prefix}M_{tki}_{tkj}"] = M_hist[:, i, j]
 
-    out[f"{col_prefix}pc1"] = pc1_hist * value_scale
-    out[f"{col_prefix}pc2"] = pc2_hist * value_scale
+    out[f"{col_prefix}pc1"] = pc1_hist
+    out[f"{col_prefix}pc2"] = pc2_hist
 
     return out
 
