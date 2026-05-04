@@ -8,6 +8,8 @@ import numpy as np
 if not hasattr(np, "bool"):
     # `qpython` still expects the removed NumPy alias on newer versions.
     np.bool = np.bool_
+if not hasattr(np, "string_"):
+    np.string_ = np.bytes_
 
 from qpython import qconnection
 

@@ -17,6 +17,9 @@ dependencies = [
     "pydantic>=2.0",
     "pyyaml",
     "plotly",
+    "scikit-learn",
+    "xgboost",
+    "graphviz",
 ]
 
 [project.scripts]

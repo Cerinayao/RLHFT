@@ -14,8 +14,8 @@ class KDBConfig(BaseModel):
 
 
 class DataConfig(BaseModel):
-    start_date: str = "2024-02-01"
-    end_date: str = "2024-02-29"
+    start_date: str = "2024-02-05"
+    end_date: str = "2024-02-23"
     date_active: str = "2024.02.05"
     instruments: tuple[str, ...] = ("ES", "NQ")
     preferred_symbols: list[str] = ["ESH4", "NQH4"]
@@ -71,7 +71,7 @@ class RuleConfig(BaseModel):
 
 
 class QLearningConfig(BaseModel):
-    train_end: str = "2024-02-19"
+    train_end: str = "2024-02-18"
     gamma: float = 0.99
     lr: float = 0.001
     epochs: int = 100
@@ -87,6 +87,35 @@ class QLearningConfig(BaseModel):
     inv_penalty: float = 1.0
 
 
+class XGBConfig(BaseModel):
+    train_end: str = "2024-02-14"
+    val_end: str = "2024-02-18"
+    n_estimators: int = 500
+    max_depth: int = 4
+    learning_rate: float = 0.02
+    subsample: float = 0.9
+    colsample_bytree: float = 0.9
+    reg_lambda: float = 5.0
+    reg_alpha: float = 0.3
+    min_child_weight: int = 3
+    random_state: int = 42
+    inv_penalty: float = 1.0
+
+
+class RuleExtractionConfig(BaseModel):
+    target_fidelity: float = 0.9
+    max_rules: int = 600
+    candidate_top_n: int = 5000
+    tree_top_n: int = 12
+
+
+class AnalysisConfig(BaseModel):
+    start_date: str = "2024-02-19"
+    trading_start: str = "00:00"
+    trading_end: str = "16:00"
+    signal_horizons_max: int = 30
+
+
 class PipelineConfig(BaseModel):
     kdb: KDBConfig = KDBConfig()
     data: DataConfig = DataConfig()
@@ -96,6 +125,9 @@ class PipelineConfig(BaseModel):
     trading: TradingConfig = TradingConfig()
     rule: RuleConfig = RuleConfig()
     qlearning: QLearningConfig = QLearningConfig()
+    xgb: XGBConfig = XGBConfig()
+    rule_extraction: RuleExtractionConfig = RuleExtractionConfig()
+    analysis: AnalysisConfig = AnalysisConfig()
     make_plots: bool = True
 
     @classmethod

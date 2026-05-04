@@ -74,6 +74,11 @@ def run_multiday_pipeline(
 
     df_state_all = compute_ewm_pca_signal(prices, cfg.signal)
 
+    # Filter rows where required columns are non-finite or zero (notebook cell 8)
+    finite_mask = np.isfinite(df_state_all[required_cols]).all(axis=1)
+    nonzero_mask = (df_state_all[required_cols] != 0).all(axis=1)
+    df_state_all = df_state_all[finite_mask & nonzero_mask].copy()
+
     # 6) Plot
     if render_plots and cfg.make_plots and len(required_cols) == 2:
         plot_asset_trading_time(df_state_all, required_cols, ["darkorange", "navy"])

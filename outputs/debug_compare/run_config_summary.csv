@@ -1,7 +1,7 @@
 item,value
 col_a,ESH4
 col_b,NQH4
-train_end,2024-02-19
+train_end,2024-02-18
 z_window,300
 z_lag,1
 z_step,0.5

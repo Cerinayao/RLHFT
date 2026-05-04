@@ -5,8 +5,8 @@ kdb:
   retry_interval: 5
 
 data:
-  start_date: "2024-02-01"
-  end_date: "2024-02-29"
+  start_date: "2024-02-05"
+  end_date: "2024-02-23"
   date_active: "2024.02.05"
   instruments: ["ES", "NQ"]
   preferred_symbols: ["ESH4", "NQH4"]
@@ -66,5 +66,31 @@ qlearning:
   lr_visit_scale: 0.01
   persistent_exploration: 0.02
   inv_penalty: 1.0
+
+xgb:
+  train_end: "2024-02-14"
+  val_end: "2024-02-18"
+  n_estimators: 500
+  max_depth: 4
+  learning_rate: 0.02
+  subsample: 0.9
+  colsample_bytree: 0.9
+  reg_lambda: 5.0
+  reg_alpha: 0.3
+  min_child_weight: 3
+  random_state: 42
+  inv_penalty: 1.0
+
+rule_extraction:
+  target_fidelity: 0.9
+  max_rules: 600
+  candidate_top_n: 5000
+  tree_top_n: 12
+
+analysis:
+  start_date: "2024-02-19"
+  trading_start: "00:00"
+  trading_end: "16:00"
+  signal_horizons_max: 30
 
 make_plots: true

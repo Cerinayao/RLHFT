@@ -39,9 +39,19 @@ def train_q_learning_2asset_discrete_adaptive(
     train_mask = df.index <= pd.Timestamp(ql_cfg.train_end)
     test_mask = ~train_mask
     if train_mask.sum() < 200:
-        raise ValueError("Training set too small.")
+        raise ValueError(
+            "Training set too small. "
+            f"train_end={ql_cfg.train_end}, train_rows={int(train_mask.sum())}, "
+            f"test_rows={int(test_mask.sum())}, "
+            f"data_range=[{df.index.min()}, {df.index.max()}]."
+        )
     if test_mask.sum() < 200:
-        raise ValueError("Test set too small.")
+        raise ValueError(
+            "Test set too small. "
+            f"train_end={ql_cfg.train_end}, train_rows={int(train_mask.sum())}, "
+            f"test_rows={int(test_mask.sum())}, "
+            f"data_range=[{df.index.min()}, {df.index.max()}]."
+        )
 
     Pa = df[col_a].astype(float)
     Pb = df[col_b].astype(float)

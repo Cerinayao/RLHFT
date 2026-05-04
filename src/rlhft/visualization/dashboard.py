@@ -93,6 +93,22 @@ def _mpl_figure_to_img_html(fig) -> str:
     return f'<img alt="plot" src="data:image/png;base64,{encoded}" style="width:100%;height:auto;display:block;border-radius:12px;" />'
 
 
+def _png_path_to_img_html(path) -> str:
+    data = Path(path).read_bytes()
+    encoded = base64.b64encode(data).decode("ascii")
+    return f'<img alt="plot" src="data:image/png;base64,{encoded}" style="width:100%;height:auto;display:block;border-radius:12px;" />'
+
+
+def _render_section(heading: str, fig) -> str:
+    if isinstance(fig, go.Figure):
+        body = to_html(fig, full_html=False, include_plotlyjs=False)
+    elif isinstance(fig, (str, Path)):
+        body = _png_path_to_img_html(fig)
+    else:
+        body = _mpl_figure_to_img_html(fig)
+    return f"<section><h2>{heading}</h2>{body}</section>"
+
+
 def _line_figure(
     traces: list[tuple[pd.Series, str, str]],
     title: str,
@@ -677,14 +693,16 @@ def build_dashboard(
         tables.append(("Regime summary", _table_figure(regime_summary, "PnL by regime")))
 
     sections: list[str] = []
+    # Render all matplotlib/PNG sections (notebook-style figures) first, then
+    # the interactive Plotly plots, then result tables. This way the dashboard
+    # surfaces every plot the notebook produces.
     if matplotlib_sections:
         for heading, fig in matplotlib_sections:
-            sections.append(f"<section><h2>{heading}</h2>{_mpl_figure_to_img_html(fig)}</section>")
-    else:
-        for heading, fig in plots:
-            sections.append(f"<section><h2>{heading}</h2>{to_html(fig, full_html=False, include_plotlyjs=False)}</section>")
+            sections.append(_render_section(heading, fig))
+    for heading, fig in plots:
+        sections.append(_render_section(heading, fig))
     for heading, fig in tables:
-        sections.append(f"<section><h2>{heading}</h2>{to_html(fig, full_html=False, include_plotlyjs=False)}</section>")
+        sections.append(_render_section(heading, fig))
 
     html = f"""<!DOCTYPE html>
 <html lang="en">

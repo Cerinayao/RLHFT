@@ -131,7 +131,7 @@ def load_multi_day(
     cfg: DataConfig,
     cfg_scale: ScalingConfig,
 ) -> pd.DataFrame:
-    dates = pd.date_range(cfg.start_date, cfg.end_date, freq="D")
+    dates = pd.date_range(cfg.start_date, cfg.end_date, freq="B")
     dates_q = [d.strftime("%Y.%m.%d") for d in dates]
 
     all_days: list[pd.DataFrame] = []
