@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
+
+from rlhft.evaluation.metrics import daily_sharpe
 
 
 def backtest_predicted_inventory_2asset(
@@ -57,8 +58,8 @@ def backtest_predicted_inventory_2asset(
             "mean_reward": reward.mean(),
             "std_pnl": pnl.std(),
             "std_reward": reward.std(),
-            "pnl_sharpe": np.sqrt(252) * pnl.mean() / pnl.std() if pnl.std() > 0 else np.nan,
-            "reward_sharpe": np.sqrt(252) * reward.mean() / reward.std() if reward.std() > 0 else np.nan,
+            "pnl_sharpe": daily_sharpe(pnl),
+            "reward_sharpe": daily_sharpe(reward),
             "max_drawdown": drawdown.min(),
             "avg_abs_inv_a": tmp[n_a_col].abs().mean(),
             "avg_abs_inv_b": tmp[n_b_col].abs().mean(),
