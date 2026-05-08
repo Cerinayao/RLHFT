@@ -15,7 +15,7 @@ if __package__ in {None, ""}:
 from rlhft.config import PipelineConfig, TradingConfig
 from rlhft.data.kdb import KDBConnection
 from rlhft.data.loaders import sym_prefix
-from rlhft.evaluation.metrics import daily_sharpe, mean_daily_pnl, max_daily_drawdown
+from rlhft.evaluation.metrics import daily_sharpe, mean_daily_pnl, max_drawdown
 from rlhft.evaluation.xgb_backtest import backtest_predicted_inventory_2asset
 from rlhft.evaluation.xrl_analysis import build_xrl_policy_df
 from rlhft.features.zscore import build_discrete_2asset_input
@@ -272,9 +272,9 @@ def run(
     print("\nRL metrics:")
     print({
         "train_mean_daily_pnl_$": mean_daily_pnl(out_rl["train_pnl"]),
-        "train_max_drawdown_$": max_daily_drawdown(out_rl["train_pnl"]),
+        "train_max_drawdown_$": max_drawdown(out_rl["train_pnl"]),
         "test_mean_daily_pnl_$": mean_daily_pnl(out_rl["test_pnl"]),
-        "test_max_drawdown_$": max_daily_drawdown(out_rl["test_pnl"]),
+        "test_max_drawdown_$": max_drawdown(out_rl["test_pnl"]),
     })
 
     matplotlib_sections: list[tuple[str, object]] = []

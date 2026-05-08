@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from rlhft.config import RuleConfig, TradingConfig, ZScoreConfig
-from rlhft.evaluation.metrics import mean_daily_pnl, max_daily_drawdown
+from rlhft.evaluation.metrics import mean_daily_pnl, max_drawdown
 from rlhft.features.zscore import make_walkforward_zscore
 
 
@@ -127,6 +127,6 @@ def run_rule_2asset_discrete(
         "z_used": z_df,
         "metrics": {
             "mean_daily_pnl_$": mean_daily_pnl(reward),
-            "max_drawdown_daily_$": max_daily_drawdown(reward),
+            "max_drawdown_$": max_drawdown(reward),
         },
     }
