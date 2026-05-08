@@ -619,6 +619,7 @@ def build_dashboard(
     action_aligned: pd.DataFrame | None,
     action_rho: float | None,
     regime_summary: pd.DataFrame | None,
+    strategy_comparison: pd.DataFrame | None,
     output_path: str | Path,
     matplotlib_sections: list[tuple[str, object]] | None = None,
 ) -> Path:
@@ -631,15 +632,17 @@ def build_dashboard(
             {"strategy": "Rule", **out_rule["metrics"]},
             {"strategy": "RL Train", **out_rl["metrics"] | {
                 "mean_daily_pnl_$": out_rl["metrics"]["train_mean_daily_pnl_$"],
+                "daily_sharpe": out_rl["metrics"]["train_daily_sharpe"],
                 "max_drawdown_daily_$": out_rl["metrics"]["train_max_drawdown_$"],
             }},
             {"strategy": "RL Test", **out_rl["metrics"] | {
                 "mean_daily_pnl_$": out_rl["metrics"]["test_mean_daily_pnl_$"],
+                "daily_sharpe": out_rl["metrics"]["test_daily_sharpe"],
                 "max_drawdown_daily_$": out_rl["metrics"]["test_max_drawdown_$"],
             }},
         ]
     )
-    keep_cols = ["strategy", "mean_daily_pnl_$", "max_drawdown_daily_$"]
+    keep_cols = ["strategy", "mean_daily_pnl_$", "daily_sharpe", "max_drawdown_daily_$"]
     metrics_df = metrics_df[keep_cols]
 
     fallback_plots: list[tuple[str, go.Figure]] = []
@@ -705,6 +708,11 @@ def build_dashboard(
     tables.append(("Metrics", _table_figure(metrics_df, "Strategy metrics")))
     if regime_summary is not None and not regime_summary.empty:
         tables.append(("Regime summary", _table_figure(regime_summary, "PnL by regime")))
+    if strategy_comparison is not None and not strategy_comparison.empty:
+        tables.append((
+            "ES/NQ strategy comparison",
+            _table_figure(strategy_comparison, "ES/NQ strategy comparison (test window)"),
+        ))
 
     sections: list[str] = []
     excluded_headings = {

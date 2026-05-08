@@ -3,6 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from rlhft.evaluation.metrics import compute_strategy_metrics
+
 
 def backtest_predicted_inventory_2asset(
     df: pd.DataFrame,
@@ -48,6 +50,7 @@ def backtest_predicted_inventory_2asset(
     pnl = tmp["pnl"].dropna()
     reward = tmp["reward"].dropna()
     drawdown = tmp["cum_pnl"] - tmp["cum_pnl"].cummax()
+    daily_metrics = compute_strategy_metrics(pnl)
 
     summary = pd.Series(
         {
@@ -60,6 +63,9 @@ def backtest_predicted_inventory_2asset(
             "pnl_sharpe": np.sqrt(252) * pnl.mean() / pnl.std() if pnl.std() > 0 else np.nan,
             "reward_sharpe": np.sqrt(252) * reward.mean() / reward.std() if reward.std() > 0 else np.nan,
             "max_drawdown": drawdown.min(),
+            "mean_daily_pnl_$": daily_metrics["mean_daily_pnl_$"],
+            "daily_sharpe": daily_metrics["daily_sharpe"],
+            "max_drawdown_daily_$": daily_metrics["max_drawdown_daily_$"],
             "avg_abs_inv_a": tmp[n_a_col].abs().mean(),
             "avg_abs_inv_b": tmp[n_b_col].abs().mean(),
             "avg_turnover": (tmp["dn_a"] + tmp["dn_b"]).mean(),

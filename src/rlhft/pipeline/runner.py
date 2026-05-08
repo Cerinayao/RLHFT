@@ -15,7 +15,7 @@ if __package__ in {None, ""}:
 from rlhft.config import PipelineConfig
 from rlhft.data.kdb import KDBConnection
 from rlhft.data.loaders import sym_prefix
-from rlhft.evaluation.metrics import mean_daily_pnl, max_daily_drawdown
+from rlhft.evaluation.metrics import compute_strategy_metrics, mean_daily_pnl, max_daily_drawdown
 from rlhft.evaluation.xgb_backtest import backtest_predicted_inventory_2asset
 from rlhft.evaluation.xrl_analysis import build_xrl_policy_df
 from rlhft.features.zscore import build_discrete_2asset_input
@@ -83,11 +83,15 @@ def rescale_rl_outputs(out_rl: dict, scale: float) -> dict:
     for k in keys:
         if k in out_rl and out_rl[k] is not None:
             out_rl[k] = out_rl[k] / scale
+    train_metrics = compute_strategy_metrics(out_rl["train_pnl"])
+    test_metrics = compute_strategy_metrics(out_rl["test_pnl"])
     out_rl["metrics"] = {
-        "train_mean_daily_pnl_$": mean_daily_pnl(out_rl["train_pnl"]),
-        "train_max_drawdown_$": max_daily_drawdown(out_rl["train_pnl"]),
-        "test_mean_daily_pnl_$": mean_daily_pnl(out_rl["test_pnl"]),
-        "test_max_drawdown_$": max_daily_drawdown(out_rl["test_pnl"]),
+        "train_mean_daily_pnl_$": train_metrics["mean_daily_pnl_$"],
+        "train_daily_sharpe": train_metrics["daily_sharpe"],
+        "train_max_drawdown_$": train_metrics["max_drawdown_daily_$"],
+        "test_mean_daily_pnl_$": test_metrics["mean_daily_pnl_$"],
+        "test_daily_sharpe": test_metrics["daily_sharpe"],
+        "test_max_drawdown_$": test_metrics["max_drawdown_daily_$"],
     }
     return out_rl
 
@@ -99,10 +103,7 @@ def rescale_rule_outputs(out_rule: dict, scale: float) -> dict:
     for k in ("reward", "cum"):
         if k in out_rule and out_rule[k] is not None:
             out_rule[k] = out_rule[k] / scale
-    out_rule["metrics"] = {
-        "mean_daily_pnl_$": mean_daily_pnl(out_rule["reward"]),
-        "max_drawdown_daily_$": max_daily_drawdown(out_rule["reward"]),
-    }
+    out_rule["metrics"] = compute_strategy_metrics(out_rule["reward"])
     return out_rule
 
 
@@ -206,6 +207,19 @@ def export_debug_data(
     return out_dir
 
 
+def build_strategy_comparison_table(strategies: dict[str, pd.Series]) -> pd.DataFrame:
+    rows = {}
+    for name, pnl in strategies.items():
+        metrics = compute_strategy_metrics(pnl)
+        rows[name] = {
+            "cum_pnl_$": metrics["cum_pnl_$"],
+            "sharpe": metrics["daily_sharpe"],
+            "mean_daily_pnl_$": metrics["mean_daily_pnl_$"],
+            "max_drawdown_daily_$": metrics["max_drawdown_daily_$"],
+        }
+    return pd.DataFrame.from_dict(rows, orient="index")
+
+
 def run(
     cfg: PipelineConfig,
     *,
@@ -277,14 +291,10 @@ def run(
     df_state_all_display = rescale_price_frame(df_state_all, display_scale, price_cols_for_display)
 
     print("\nRL metrics:")
-    print({
-        "train_mean_daily_pnl_$": mean_daily_pnl(out_rl["train_pnl"]),
-        "train_max_drawdown_$": max_daily_drawdown(out_rl["train_pnl"]),
-        "test_mean_daily_pnl_$": mean_daily_pnl(out_rl["test_pnl"]),
-        "test_max_drawdown_$": max_daily_drawdown(out_rl["test_pnl"]),
-    })
+    print(pd.Series(out_rl["metrics"]))
 
     matplotlib_sections: list[tuple[str, object]] = []
+    strategy_comparison = None
 
     # --- Visualization (notebook order) ---
     if cfg.make_plots:
@@ -714,51 +724,22 @@ def run(
             print("\n=== Partition Tree Rule Backtest ===")
             print(partition_summary)
 
-            partition_pnl = partition_bt["pnl"].between_time(
-                cfg.analysis.trading_start, cfg.analysis.trading_end
-            ).dropna()
-            rl_pnl = out_rl["test_pnl"].reindex(partition_pnl.index).dropna()
-            common_idx = partition_pnl.index.intersection(rl_pnl.index)
-            partition_pnl = partition_pnl.loc[common_idx]
-            rl_pnl = rl_pnl.loc[common_idx]
-            compare_summary = pd.DataFrame(
+            strategy_comparison = build_strategy_comparison_table(
                 {
-                    "Partition_Tree": {
-                        "cum_pnl": partition_pnl.sum(),
-                        "mean_pnl": partition_pnl.mean(),
-                        "std_pnl": partition_pnl.std(),
-                        "sharpe": (
-                            np.sqrt(252) * partition_pnl.mean() / partition_pnl.std()
-                            if partition_pnl.std() > 0
-                            else np.nan
-                        ),
-                        "max_drawdown": (
-                            partition_pnl.cumsum() - partition_pnl.cumsum().cummax()
-                        ).min(),
-                    },
-                    "RL": {
-                        "cum_pnl": rl_pnl.sum(),
-                        "mean_pnl": rl_pnl.mean(),
-                        "std_pnl": rl_pnl.std(),
-                        "sharpe": (
-                            np.sqrt(252) * rl_pnl.mean() / rl_pnl.std()
-                            if rl_pnl.std() > 0
-                            else np.nan
-                        ),
-                        "max_drawdown": (
-                            rl_pnl.cumsum() - rl_pnl.cumsum().cummax()
-                        ).min(),
-                    },
+                    "RL": out_rl["test_pnl"],
+                    "XGB distilled": xgb_test_bt["pnl"],
+                    "TE2Rules": rule_bt["pnl"],
+                    "Partition tree": partition_bt["pnl"],
                 }
             )
-            print("\n=== Partition Tree Rules vs RL Summary ===")
-            print(compare_summary)
+            print("\n=== ES/NQ Strategy Comparison (Test Window) ===")
+            print(strategy_comparison)
 
             partition_tree_results = {
                 "pred_test": pred_partition_test,
                 "partition_bt": partition_bt,
                 "partition_summary": partition_summary,
-                "compare_summary": compare_summary,
+                "compare_summary": strategy_comparison,
             }
 
             if cfg.make_plots:
@@ -822,6 +803,7 @@ def run(
             action_aligned=action_aligned,
             action_rho=action_rho,
             regime_summary=regime_summary,
+            strategy_comparison=strategy_comparison,
             output_path=dashboard_out,
             matplotlib_sections=matplotlib_sections,
         )
@@ -853,6 +835,7 @@ def run(
         "xgb_test_bt": xgb_test_bt,
         "rule_extraction": rule_extraction_results,
         "partition_tree": partition_tree_results,
+        "strategy_comparison": strategy_comparison,
         "dashboard_path": dashboard_path,
         "debug_export_path": debug_export_path,
     }

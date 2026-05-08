@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from rlhft.config import QLearningConfig, TradingConfig, ZScoreConfig
-from rlhft.evaluation.metrics import clip_int, mean_daily_pnl, max_daily_drawdown
+from rlhft.evaluation.metrics import clip_int, compute_strategy_metrics
 from rlhft.features.zscore import (
     make_walkforward_zscore,
     quantize_z,
@@ -202,6 +202,9 @@ def train_q_learning_2asset_discrete_adaptive(
     tr_pnl, tr_reward, tr_cum_pnl, tr_cum_reward, tr_n, tr_act = greedy_run(train_mask)
     te_pnl, te_reward, te_cum_pnl, te_cum_reward, te_n, te_act = greedy_run(test_mask)
 
+    train_metrics = compute_strategy_metrics(tr_pnl)
+    test_metrics = compute_strategy_metrics(te_pnl)
+
     return {
         "Q": Q,
         "joint_actions": joint_actions,
@@ -228,9 +231,11 @@ def train_q_learning_2asset_discrete_adaptive(
             "inventory_values": list(range(-inv_limit, inv_limit + 1)),
         },
         "metrics": {
-            "train_mean_daily_pnl_$": mean_daily_pnl(tr_pnl),
-            "train_max_drawdown_$": max_daily_drawdown(tr_pnl),
-            "test_mean_daily_pnl_$": mean_daily_pnl(te_pnl),
-            "test_max_drawdown_$": max_daily_drawdown(te_pnl),
+            "train_mean_daily_pnl_$": train_metrics["mean_daily_pnl_$"],
+            "train_daily_sharpe": train_metrics["daily_sharpe"],
+            "train_max_drawdown_$": train_metrics["max_drawdown_daily_$"],
+            "test_mean_daily_pnl_$": test_metrics["mean_daily_pnl_$"],
+            "test_daily_sharpe": test_metrics["daily_sharpe"],
+            "test_max_drawdown_$": test_metrics["max_drawdown_daily_$"],
         },
     }
