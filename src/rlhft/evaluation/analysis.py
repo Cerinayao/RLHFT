@@ -99,10 +99,13 @@ def summarize_pnl_by_regime(
     tmp = tmp.dropna()
     tmp = tmp[tmp["regime"].isin([-1, 1])]
 
-    def sharpe(x):
-        if len(x) < 2 or x.std(ddof=1) == 0:
+    def sharpe(x: pd.Series) -> float:
+        if x.empty:
             return np.nan
-        return np.sqrt(annualization) * x.mean() / x.std(ddof=1)
+        daily = x.groupby(x.index.normalize()).sum()
+        if len(daily) < 2 or daily.std(ddof=1) == 0:
+            return np.nan
+        return float(np.sqrt(annualization) * daily.mean() / daily.std(ddof=1))
 
     results = {}
     for reg, name in [(1, "works (+1)"), (-1, "fails (-1)")]:

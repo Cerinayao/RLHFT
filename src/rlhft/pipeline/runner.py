@@ -15,7 +15,7 @@ if __package__ in {None, ""}:
 from rlhft.config import PipelineConfig, TradingConfig
 from rlhft.data.kdb import KDBConnection
 from rlhft.data.loaders import sym_prefix
-from rlhft.evaluation.metrics import mean_daily_pnl, max_daily_drawdown
+from rlhft.evaluation.metrics import daily_sharpe, mean_daily_pnl, max_daily_drawdown
 from rlhft.evaluation.xgb_backtest import backtest_predicted_inventory_2asset
 from rlhft.evaluation.xrl_analysis import build_xrl_policy_df
 from rlhft.features.zscore import build_discrete_2asset_input
@@ -494,22 +494,14 @@ def run(
                     "cum_pnl": rule_pnl_test.sum(),
                     "mean_pnl": rule_pnl_test.mean(),
                     "std_pnl": rule_pnl_test.std(),
-                    "sharpe": (
-                        np.sqrt(252) * rule_pnl_test.mean() / rule_pnl_test.std()
-                        if len(rule_pnl_test) > 1 and rule_pnl_test.std() > 0
-                        else np.nan
-                    ),
+                    "sharpe": daily_sharpe(rule_pnl_test),
                     "max_drawdown": (rule_pnl_test.cumsum() - rule_pnl_test.cumsum().cummax()).min(),
                 },
                 "RL": {
                     "cum_pnl": rl_pnl_test.sum(),
                     "mean_pnl": rl_pnl_test.mean(),
                     "std_pnl": rl_pnl_test.std(),
-                    "sharpe": (
-                        np.sqrt(252) * rl_pnl_test.mean() / rl_pnl_test.std()
-                        if len(rl_pnl_test) > 1 and rl_pnl_test.std() > 0
-                        else np.nan
-                    ),
+                    "sharpe": daily_sharpe(rl_pnl_test),
                     "max_drawdown": (rl_pnl_test.cumsum() - rl_pnl_test.cumsum().cummax()).min(),
                 },
             }
