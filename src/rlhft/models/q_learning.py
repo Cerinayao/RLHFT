@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from rlhft.config import QLearningConfig, TradingConfig, ZScoreConfig
-from rlhft.evaluation.metrics import clip_int, mean_daily_pnl, max_daily_drawdown
+from rlhft.evaluation.metrics import clip_int, mean_daily_pnl, max_drawdown
 from rlhft.features.zscore import (
     make_walkforward_zscore,
     quantize_z,
@@ -229,8 +229,8 @@ def train_q_learning_2asset_discrete_adaptive(
         },
         "metrics": {
             "train_mean_daily_pnl_$": mean_daily_pnl(tr_pnl),
-            "train_max_drawdown_$": max_daily_drawdown(tr_pnl),
+            "train_max_drawdown_$": max_drawdown(tr_pnl),
             "test_mean_daily_pnl_$": mean_daily_pnl(te_pnl),
-            "test_max_drawdown_$": max_daily_drawdown(te_pnl),
+            "test_max_drawdown_$": max_drawdown(te_pnl),
         },
     }

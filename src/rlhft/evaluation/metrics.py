@@ -13,9 +13,11 @@ def mean_daily_pnl(reward: pd.Series) -> float:
     return float(daily.mean())
 
 
-def max_daily_drawdown(reward: pd.Series) -> float:
-    daily = reward.resample("1D").sum()
-    cum = daily.cumsum()
+def max_drawdown(reward: pd.Series) -> float:
+    series = reward.dropna().astype(float)
+    if series.empty:
+        return float("nan")
+    cum = series.cumsum()
     dd = cum - cum.cummax()
     return float(dd.min())
 
@@ -39,6 +41,6 @@ def daily_sharpe(pnl: pd.Series, annualization: float = 252.0) -> float:
 def compute_strategy_metrics(pnl: pd.Series) -> dict[str, float]:
     return {
         "mean_daily_pnl_$": mean_daily_pnl(pnl),
-        "max_drawdown_daily_$": max_daily_drawdown(pnl),
+        "max_drawdown_$": max_drawdown(pnl),
         "daily_sharpe": daily_sharpe(pnl),
     }
