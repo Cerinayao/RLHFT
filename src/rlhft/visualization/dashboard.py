@@ -633,16 +633,16 @@ def build_dashboard(
             {"strategy": "RL Train", **out_rl["metrics"] | {
                 "mean_daily_pnl_$": out_rl["metrics"]["train_mean_daily_pnl_$"],
                 "daily_sharpe": out_rl["metrics"]["train_daily_sharpe"],
-                "max_drawdown_daily_$": out_rl["metrics"]["train_max_drawdown_$"],
+                "max_drawdown_$": out_rl["metrics"]["train_max_drawdown_$"],
             }},
             {"strategy": "RL Test", **out_rl["metrics"] | {
                 "mean_daily_pnl_$": out_rl["metrics"]["test_mean_daily_pnl_$"],
                 "daily_sharpe": out_rl["metrics"]["test_daily_sharpe"],
-                "max_drawdown_daily_$": out_rl["metrics"]["test_max_drawdown_$"],
+                "max_drawdown_$": out_rl["metrics"]["test_max_drawdown_$"],
             }},
         ]
     )
-    keep_cols = ["strategy", "mean_daily_pnl_$", "daily_sharpe", "max_drawdown_daily_$"]
+    keep_cols = ["strategy", "mean_daily_pnl_$", "daily_sharpe", "max_drawdown_$"]
     metrics_df = metrics_df[keep_cols]
 
     fallback_plots: list[tuple[str, go.Figure]] = []

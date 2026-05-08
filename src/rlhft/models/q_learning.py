@@ -233,9 +233,9 @@ def train_q_learning_2asset_discrete_adaptive(
         "metrics": {
             "train_mean_daily_pnl_$": train_metrics["mean_daily_pnl_$"],
             "train_daily_sharpe": train_metrics["daily_sharpe"],
-            "train_max_drawdown_$": train_metrics["max_drawdown_daily_$"],
+            "train_max_drawdown_$": train_metrics["max_drawdown_$"],
             "test_mean_daily_pnl_$": test_metrics["mean_daily_pnl_$"],
             "test_daily_sharpe": test_metrics["daily_sharpe"],
-            "test_max_drawdown_$": test_metrics["max_drawdown_daily_$"],
+            "test_max_drawdown_$": test_metrics["max_drawdown_$"],
         },
     }

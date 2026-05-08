@@ -15,7 +15,7 @@ if __package__ in {None, ""}:
 from rlhft.config import PipelineConfig
 from rlhft.data.kdb import KDBConnection
 from rlhft.data.loaders import sym_prefix
-from rlhft.evaluation.metrics import compute_strategy_metrics, mean_daily_pnl, max_daily_drawdown
+from rlhft.evaluation.metrics import compute_strategy_metrics, mean_daily_pnl, max_drawdown
 from rlhft.evaluation.xgb_backtest import backtest_predicted_inventory_2asset
 from rlhft.evaluation.xrl_analysis import build_xrl_policy_df
 from rlhft.features.zscore import build_discrete_2asset_input
@@ -88,10 +88,10 @@ def rescale_rl_outputs(out_rl: dict, scale: float) -> dict:
     out_rl["metrics"] = {
         "train_mean_daily_pnl_$": train_metrics["mean_daily_pnl_$"],
         "train_daily_sharpe": train_metrics["daily_sharpe"],
-        "train_max_drawdown_$": train_metrics["max_drawdown_daily_$"],
+        "train_max_drawdown_$": train_metrics["max_drawdown_$"],
         "test_mean_daily_pnl_$": test_metrics["mean_daily_pnl_$"],
         "test_daily_sharpe": test_metrics["daily_sharpe"],
-        "test_max_drawdown_$": test_metrics["max_drawdown_daily_$"],
+        "test_max_drawdown_$": test_metrics["max_drawdown_$"],
     }
     return out_rl
 
@@ -215,7 +215,7 @@ def build_strategy_comparison_table(strategies: dict[str, pd.Series]) -> pd.Data
             "cum_pnl_$": metrics["cum_pnl_$"],
             "sharpe": metrics["daily_sharpe"],
             "mean_daily_pnl_$": metrics["mean_daily_pnl_$"],
-            "max_drawdown_daily_$": metrics["max_drawdown_daily_$"],
+            "max_drawdown_$": metrics["max_drawdown_$"],
         }
     return pd.DataFrame.from_dict(rows, orient="index")
 
@@ -724,8 +724,12 @@ def run(
             print("\n=== Partition Tree Rule Backtest ===")
             print(partition_summary)
 
+            rule_reward_test = out_rule["reward"][
+                out_rule["reward"].index > pd.Timestamp(cfg.qlearning.train_end)
+            ]
             strategy_comparison = build_strategy_comparison_table(
                 {
+                    "Rule": rule_reward_test,
                     "RL": out_rl["test_pnl"],
                     "XGB distilled": xgb_test_bt["pnl"],
                     "TE2Rules": rule_bt["pnl"],

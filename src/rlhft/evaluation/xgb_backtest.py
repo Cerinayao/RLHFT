@@ -50,7 +50,7 @@ def backtest_predicted_inventory_2asset(
     pnl = tmp["pnl"].dropna()
     reward = tmp["reward"].dropna()
     drawdown = tmp["cum_pnl"] - tmp["cum_pnl"].cummax()
-    daily_metrics = compute_strategy_metrics(pnl)
+    strat_metrics = compute_strategy_metrics(pnl)
 
     summary = pd.Series(
         {
@@ -63,9 +63,9 @@ def backtest_predicted_inventory_2asset(
             "pnl_sharpe": np.sqrt(252) * pnl.mean() / pnl.std() if pnl.std() > 0 else np.nan,
             "reward_sharpe": np.sqrt(252) * reward.mean() / reward.std() if reward.std() > 0 else np.nan,
             "max_drawdown": drawdown.min(),
-            "mean_daily_pnl_$": daily_metrics["mean_daily_pnl_$"],
-            "daily_sharpe": daily_metrics["daily_sharpe"],
-            "max_drawdown_daily_$": daily_metrics["max_drawdown_daily_$"],
+            "mean_daily_pnl_$": strat_metrics["mean_daily_pnl_$"],
+            "daily_sharpe": strat_metrics["daily_sharpe"],
+            "max_drawdown_$": strat_metrics["max_drawdown_$"],
             "avg_abs_inv_a": tmp[n_a_col].abs().mean(),
             "avg_abs_inv_b": tmp[n_b_col].abs().mean(),
             "avg_turnover": (tmp["dn_a"] + tmp["dn_b"]).mean(),
