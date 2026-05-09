@@ -249,11 +249,7 @@ Evaluation + Dashboard + Debug Exports
 - Tabular Q-Learning
 - Pydantic + YAML configuration
 
----
 
-## 📜 License
-
-MIT License
 
 ---
 
